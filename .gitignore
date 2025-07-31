@@ -1,0 +1,10 @@
+# 모든 것을 무시
+*
+
+# 특정 폴더만 예외 처리 (앞에 !를 붙여서 무시하지 않도록 함)
+!contrib/
+!src/
+!scratch/
+
+# .gitignore 파일 자체는 무시하지 않음
+!.gitignore

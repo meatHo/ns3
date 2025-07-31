@@ -56,160 +56,6 @@ UeSlMeasCallback(uint16_t RNTI, uint32_t L2ID, double RSRP)
 
 
 
-void
-UeRssiPerProcessedChunk(Ptr<SpectrumPhy> phy, double rssidBm)
-{
-    static uint8_t cnt = 0;
-    static double sum = 0.0;
-    static double totalsum = 0.0;
-    static uint16_t totalcnt=0;
-    cnt++;
-    sum += rssidBm;
-
-    if (cnt == 50)
-    {
-        double avg = sum / cnt;
-
-        Ptr<NrSpectrumPhy> nrPhy = DynamicCast<NrSpectrumPhy>(phy);
-        Ptr<NetDevice> dev = nrPhy->GetDevice();
-        Ptr<Node> node = dev->GetNode();
-
-        uint32_t nodeId  = node->GetId();
-        uint32_t devIdx  = dev->GetIfIndex();
-
-        uint16_t cellId  = nrPhy->GetCellId();
-        //uint16_t rnti    = nrPhy->GetRnti();
-        uint16_t bwpId   = nrPhy->GetBwpId();
-
-        std::cout << "[Uu Node "   << nodeId
-                  << " | Dev "   << devIdx
-                  << " | Cell "  << cellId
-                  //<< " | RNTI "  << rnti
-                  << " | BWP "   << bwpId
-                  << "] 10‑Chunk Avg RSSI = "
-                  << avg << " dBm"
-                  << std::endl;
-        totalsum += sum;
-        totalcnt += cnt;
-        cnt = 0;
-        sum = 0.0;
-    }
-}
-
-void
-UeSlRssiPerProcessedChunk(Ptr<SpectrumPhy> phy, double rssidBm)
-{
-    static uint8_t cnt = 0;
-    static double sum = 0.0;
-    static double totalsum = 0.0;
-    static uint16_t totalcnt=0;
-    cnt++;
-    sum += rssidBm;
-
-    if (cnt == 50)
-    {
-        double avg = sum / cnt;
-
-        Ptr<NrSpectrumPhy> nrPhy = DynamicCast<NrSpectrumPhy>(phy);
-        Ptr<NetDevice> dev = nrPhy->GetDevice();
-        Ptr<Node> node = dev->GetNode();
-
-        uint32_t nodeId  = node->GetId();
-        uint32_t devIdx  = dev->GetIfIndex();
-
-        uint16_t cellId  = nrPhy->GetCellId();
-        //uint16_t rnti    = nrPhy->GetRnti();
-        uint16_t bwpId   = nrPhy->GetBwpId();
-
-        std::cout << "[SideLink Node "   << nodeId
-                  << " | Dev "   << devIdx
-                  << " | Cell "  << cellId
-                  //<< " | RNTI "  << rnti
-                  << " | BWP "   << bwpId
-                  << "] 10‑Chunk Avg RSSI = "
-                  << avg << " dBm"
-                  << std::endl;
-        totalsum += sum;
-        totalcnt += cnt;
-        cnt = 0;
-        sum = 0.0;
-    }
-}
-
-
-
-void
-printRssi(Ptr<const SpectrumValue> psd)
-{
-    // 스펙트럼 모델을 통해 sub‑carrier 간격(Hz)을 구함
-    Ptr<const SpectrumModel> sm = psd->GetSpectrumModel();
-    double binWidth = sm->Begin()->fh - sm->Begin()->fl;
-
-    // PSD[W/Hz] × binWidth → 각 bin 전력[W], 모두 합산
-    double powerW = Sum(*psd * binWidth);
-
-    // W → dBm 변환
-    double rssiDbm = 10.0 * std::log10(powerW * 1e3);
-
-    std::cout << "[printRssi] RSSI = " << rssiDbm << " dBm" << std::endl << std::endl;
-}
-
-void
-psdCallback(const SfnSf& sfnSf,
-            Ptr<const SpectrumValue> v,
-            const Time& phyTime,
-            uint16_t rnti,
-            uint64_t imsi,
-            uint16_t bwpId,
-            uint16_t cellId)
-{
-    // 1) 시뮬레이션 현재 시각(Time)과 SFN/Subframe
-    std::cout << "[PSD Callback] SimTime="
-              << Simulator::Now().GetSeconds()
-              //<< "s, SFN=" << sfnSf.m_sfn << ", SF=" << sfnSf.m_sf
-              << ", PhyTime=" << phyTime.GetSeconds() << "s" << std::endl;
-
-    // 2) 식별자 정보
-    std::cout << "  RNTI=" << rnti << ", IMSI=" << imsi << ", BWP=" << bwpId
-              << ", CellId=" << cellId << std::endl;
-
-    // 3) PSD 벡터 값 출력 (Hz당 W 단위)
-    std::cout << "  PSD values (W/Hz):";
-    uint32_t idx = 0;
-    for (auto it = v->ConstValuesBegin(); it != v->ConstValuesEnd(); ++it, ++idx)
-    {
-        // 8개 단위로 줄 바꿈
-        if (idx % 8 == 0)
-            std::cout << std::endl << "   ";
-        std::cout << *it;
-        if (it + 1 != v->ConstValuesEnd())
-            std::cout << "\t";
-    }
-    printRssi(v);
-}
-
-void
-RxDataCallback(const SfnSf& sfnSf,
-               Ptr<const SpectrumValue> rxPsd,
-               const Time& duration,
-               uint16_t bwpId,
-               uint16_t cellId)
-{
-    // 1) 스펙트럼 모델에서 주파수 분할폭(Hz) 가져오기
-    Ptr<const SpectrumModel> sm = rxPsd->GetSpectrumModel();
-    double binWidth = sm->Begin()->fh - sm->Begin()->fl; // 예: subcarrier 간격
-
-    // 2) PSD 벡터 × binWidth → 각 bin별 W 단위 전력 → 모두 합산
-    double powerW = Sum(*rxPsd * binWidth);
-
-    // 3) W → dBm 변환: 10·log10(powerW·1000)
-    double rssiDbm = 10.0 * std::log10(powerW * 1e3);
-
-    std::cout << "RSSI = " << rssiDbm << " dBm (BWP " << bwpId << ", Cell " << cellId << ")\n";
-
-    // 여기서 강화학습 환경으로 넘기시면 됩니다.
-}
-
 // UE의 위치와 속도를 출력하는 함수
 void
 PrintUeInfo(Ptr<Node> ueNode)
@@ -224,18 +70,6 @@ PrintUeInfo(Ptr<Node> ueNode)
     Simulator::Schedule(Seconds(1.0), &PrintUeInfo, ueNode);
 }
 
-// 패킷 정보를 출력할 콜백 함수
-void
-Ipv6PacketTraceAtRsu(Ptr<const Packet> packet, Ptr<Ipv6> ipv6, uint32_t interfaceIndex)
-{
-    Ipv6Header ipv6Header;
-    packet->PeekHeader(ipv6Header);
-
-    std::cout << "[RSU Packet Trace] Time: " << Simulator::Now().GetSeconds() << "s"
-              << " | Interface: " << interfaceIndex << " | Size: " << packet->GetSize() << " bytes"
-              << std::endl;
-}
-
 void
 Ipv6PacketTraceAtPgw(Ptr<const Packet> packet, Ptr<Ipv6> ipv6, uint32_t interfaceIndex)
 {
@@ -247,120 +81,303 @@ Ipv6PacketTraceAtPgw(Ptr<const Packet> packet, Ptr<Ipv6> ipv6, uint32_t interfac
               << std::endl;
 }
 
-// RSU에 설치할 UDP 릴레이 애플리케이션
-class UdpRelay : public Application
+
+
+namespace ns3
 {
-  public:
+
+class Socket;
+class Packet;
+
+class TcpClient : public Application
+{
+public:
     static TypeId GetTypeId();
 
-    UdpRelay()
-    {
-    }
+    TcpClient();
+    ~TcpClient() override;
 
-    ~UdpRelay() override
-    {
-    }
+    uint64_t GetTotalTx() const;
 
-  private:
+    void changeInterface();
+    void setInterface(Ptr<NetDevice> uu, Ptr<NetDevice> sl);
+    // [수정] RSU의 Sidelink IP 주소(Next Hop)를 받기 위한 파라미터 추가
+
+    void ConnectionSucceeded(Ptr<Socket> socket);
+    void ConnectionFailed(Ptr<Socket> socket);
+
+private:
     void StartApplication() override;
     void StopApplication() override;
-    void HandleRead(Ptr<Socket> socket); // UE로부터 패킷을 수신하는 콜백 함수
+    void Send();
+    void SelectInterface(Ptr<Socket> socket);
+    void HandleRecv(Ptr<Socket> socket);
 
-    Ptr<Socket> m_inSocket;  // UE로부터 수신용 소켓
-    Ptr<Socket> m_outSocket; // 서버로 송신용 소켓
+    TracedCallback<Ptr<const Packet>> m_txTrace;
+    TracedCallback<Ptr<const Packet>, const Address&, const Address&> m_txTraceWithAddresses;
 
-    uint16_t m_inPort;    // 수신 포트 (UE가 여기로 보냄)
-    Address m_outAddress; // 최종 목적지 서버 주소
-    uint16_t m_outPort;   // 최종 목적지 서버 포트
+    uint32_t m_count;
+    Time m_interval;
+    uint32_t m_size;
+
+    uint32_t m_sent;
+    uint64_t m_totalTx;
+    Ptr<Socket> m_uuSocket;
+    Ptr<Socket> m_slSocket;
+    Ptr<Socket> m_sendSocket;
+    Ptr<Socket> m_recvSocket;
+    Address m_slServerAddress;
+    uint16_t m_slServerPort;
+    uint16_t m_recvPort;
+    Address m_uuServerAddress;
+    uint16_t m_uuServerPort;
+    Ptr<NetDevice> m_devUu, m_devSl;
+
+
+    uint8_t m_tos;
+    EventId m_sendEvent;
+
+#ifdef NS3_LOG_ENABLE
+    std::string m_peerAddressString;
+#endif
 };
 
-NS_OBJECT_ENSURE_REGISTERED(UdpRelay);
+} // namespace ns3
+
 
 TypeId
-UdpRelay::GetTypeId()
+TcpClient::GetTypeId()
 {
     static TypeId tid =
-        TypeId("UdpRelay")
+        TypeId("ns3::TcpClient")
             .SetParent<Application>()
             .SetGroupName("Applications")
-            .AddConstructor<UdpRelay>()
-            .AddAttribute("InPort",
-                          "Port on which we listen for incoming packets from UEs.",
-                          UintegerValue(8000), // 기본 수신 포트
-                          MakeUintegerAccessor(&UdpRelay::m_inPort),
-                          MakeUintegerChecker<uint16_t>())
-            .AddAttribute("OutAddress",
-                          "The destination Address of the outbound packets to the server.",
+            .AddConstructor<TcpClient>()
+            .AddAttribute(
+                "MaxPackets",
+                "The maximum number of packets the application will send (zero means infinite)",
+                UintegerValue(100),
+                MakeUintegerAccessor(&TcpClient::m_count),
+                MakeUintegerChecker<uint32_t>())
+            .AddAttribute("Interval",
+                          "The time to wait between packets",
+                          TimeValue(Seconds(1.0)),
+                          MakeTimeAccessor(&TcpClient::m_interval),
+                          MakeTimeChecker())
+            .AddAttribute("uuServerAddress",
+                          "The destination Address of the outbound packets",
                           AddressValue(),
-                          MakeAddressAccessor(&UdpRelay::m_outAddress),
+                          MakeAddressAccessor(&TcpClient::m_uuServerAddress),
                           MakeAddressChecker())
-            .AddAttribute("OutPort",
-                          "The destination port of the outbound packets to the server.",
-                          UintegerValue(5000), // 서버의 포트
-                          MakeUintegerAccessor(&UdpRelay::m_outPort),
-                          MakeUintegerChecker<uint16_t>());
+            .AddAttribute("uuServerPort",
+                          "The destination port of the outbound packets",
+                          UintegerValue(100),
+                          MakeUintegerAccessor(&TcpClient::m_uuServerPort),
+                          MakeUintegerChecker<uint16_t>())
+            .AddAttribute("recvPort",
+                          "The destination port of the outbound packets",
+                          UintegerValue(100),
+                          MakeUintegerAccessor(&TcpClient::m_recvPort),
+                          MakeUintegerChecker<uint16_t>())
+            .AddAttribute("Tos",
+                          "The Type of Service used to send IPv4 packets. "
+                          "All 8 bits of the TOS byte are set (including ECN bits).",
+                          UintegerValue(0),
+                          MakeUintegerAccessor(&TcpClient::m_tos),
+                          MakeUintegerChecker<uint8_t>())
+            .AddAttribute("PacketSize",
+                          "Size of packets generated. The minimum packet size is 12 bytes which is "
+                          "the size of the header carrying the sequence number and the time stamp.",
+                          UintegerValue(1024),
+                          MakeUintegerAccessor(&TcpClient::m_size),
+                          MakeUintegerChecker<uint32_t>(12, 65507))
+            .AddTraceSource("Tx",
+                            "A new packet is created and sent",
+                            MakeTraceSourceAccessor(&TcpClient::m_txTrace),
+                            "ns3::Packet::TracedCallback")
+            .AddTraceSource("TxWithAddresses",
+                            "A new packet is created and sent",
+                            MakeTraceSourceAccessor(&TcpClient::m_txTraceWithAddresses),
+                            "ns3::Packet::TwoAddressTracedCallback");
     return tid;
 }
 
-void
-UdpRelay::StartApplication()
+TcpClient::TcpClient()
 {
-    // 1. UE로부터 패킷을 받을 소켓(수신용) 설정
-    m_inSocket = Socket::CreateSocket(GetNode(), TypeId::LookupByName("ns3::UdpSocketFactory"));
-    Inet6SocketAddress local = Inet6SocketAddress(Ipv6Address::GetAny(), m_inPort);
-    if (m_inSocket->Bind(local) == -1)
+    m_sent = 0;
+    m_totalTx = 0;
+    m_uuSocket = nullptr;
+    m_slSocket = nullptr;
+    m_sendEvent = EventId();
+}
+
+TcpClient::~TcpClient()
+{
+}
+
+void
+TcpClient::StartApplication()
+{
+
+    TypeId tid = TypeId::LookupByName("ns3::TcpSocketFactory");
+    // listening 소켓 설정
+    m_recvSocket = Socket::CreateSocket(GetNode(), tid);
+    Inet6SocketAddress local = Inet6SocketAddress(Ipv6Address::GetAny(), m_recvPort);
+    if (m_recvSocket->Bind(local) == -1)
     {
         NS_FATAL_ERROR("UdpRelay: Failed to bind In-Socket");
-    }
-    m_inSocket->SetRecvCallback(MakeCallback(&UdpRelay::HandleRead, this));
+    }// todo: handle read 안만들음 나중에 콜백으로 이으셈 필요하면
 
-    // 2. 서버로 패킷을 보낼 소켓(송신용) 설정
-    m_outSocket = Socket::CreateSocket(GetNode(), TypeId::LookupByName("ns3::UdpSocketFactory"));
-    if (m_outSocket->Connect(
-            Inet6SocketAddress(Ipv6Address::ConvertFrom(m_outAddress), m_outPort)) == -1)
+    // Uu 소켓 설정
+    m_uuSocket = Socket::CreateSocket(GetNode(), tid);
+    m_uuSocket->BindToNetDevice(m_devUu); // Connect 전에 Bind
+
+
+    //tcp
+    m_uuSocket->SetConnectCallback(MakeCallback(&TcpClient::ConnectionSucceeded, this),
+                               MakeCallback(&TcpClient::ConnectionFailed, this));
+
+
+    if (Ipv6Address::IsMatchingType(m_uuServerAddress))
     {
-        NS_FATAL_ERROR("UdpRelay: Failed to connect Out-Socket to server");
+        NS_LOG_UNCOND("uu socket connection started");
+        m_uuSocket->Connect(
+            Inet6SocketAddress(Ipv6Address::ConvertFrom(m_uuServerAddress), m_uuServerPort));
     }
 
-    std::cout << "RSU Relay Application Started. Listening on port " << m_inPort << ", Relaying to "
-              << m_outAddress << ":" << m_outPort << std::endl;
+
+    // 수신 콜백 설정 (양방향 통신 시 필요)
+    m_uuSocket->SetRecvCallback(MakeCallback(&TcpClient::HandleRecv, this));
+
+
+    // 초기 인터페이스는 Uu로 설정
+    m_sendSocket = m_uuSocket;
+    NS_LOG_UNCOND("Client starts with uu interface.");
+
+    // m_sendEvent = Simulator::Schedule(Seconds(0.0), &UdpClient::Send, this);
 }
 
 void
-UdpRelay::StopApplication()
+TcpClient::ConnectionSucceeded(Ptr<Socket> socket)//tcp
 {
-    if (m_inSocket)
+    NS_LOG_UNCOND("Connection Succeeded.");
+
+    // 최초 연결이 성공하면 Send() 함수 스케줄링 시작
+    if (!m_sendEvent.IsRunning())
     {
-        m_inSocket->Close();
-        m_inSocket->SetRecvCallback(MakeNullCallback<void, Ptr<Socket>>());
-    }
-    if (m_outSocket)
-    {
-        m_outSocket->Close();
+        NS_LOG_UNCOND("First connection established. Starting to send data.");
+        m_sendEvent = Simulator::Schedule(Seconds(0.0), &TcpClient::Send, this);
     }
 }
 
 void
-UdpRelay::HandleRead(Ptr<Socket> socket)
+TcpClient::ConnectionFailed(Ptr<Socket> socket)
 {
+    NS_LOG_UNCOND("Connection Failed.");
+    if (socket == m_uuSocket)
+    {
+        NS_LOG_UNCOND("UU Socket connection failed.");
+    }
+}
+
+
+void
+TcpClient::HandleRecv(Ptr<Socket> socket)
+{
+
     Ptr<Packet> packet;
-    Address from;
-    while ((packet = socket->RecvFrom(from)))
+    // ★★★ RecvFrom 대신 Recv 사용
+    while ((packet = socket->Recv()))
     {
         if (packet->GetSize() == 0)
         {
             break;
         }
-
-        std::cout << "RSU Relay: Received " << packet->GetSize() << " bytes from "
-                  << Inet6SocketAddress::ConvertFrom(from).GetIpv6() << std::endl;
-
-        // 받은 패킷 그대로 서버로 전달 (송신용 소켓 사용)
-        m_outSocket->Send(packet->Copy());
-
-        std::cout << "RSU Relay: Relayed packet to server." << std::endl;
+        uint8_t* buffer = new uint8_t[packet->GetSize() + 1];
+        packet->CopyData(buffer, packet->GetSize());
+        buffer[packet->GetSize()] = '\0';
+        NS_LOG_UNCOND("Received a " << packet->GetSize() << " bytes packet: " << buffer);
+        delete[] buffer;
     }
 }
+
+
+void
+TcpClient::StopApplication()
+{
+    Simulator::Cancel(m_sendEvent);
+}
+
+
+void
+TcpClient::Send()
+{
+    NS_LOG_UNCOND("TCPCLIENT::SEND");
+    NS_ASSERT(m_sendEvent.IsExpired());
+
+    SeqTsHeader seqTs;
+    seqTs.SetSeq(m_sent);
+    Ptr<Packet> p = Create<Packet>(m_size - seqTs.GetSerializedSize());
+    p->AddHeader(seqTs);
+
+    // ★★★ SendTo 대신 Send 사용 (연결된 소켓이므로 목적지 지정 불필요)
+    if ((m_sendSocket->Send(p)) >= 0)
+    {
+        ++m_sent;
+        m_totalTx += p->GetSize();
+        NS_LOG_UNCOND("Sent a " << p->GetSize() << " bytes packet. Total sent: " << m_sent);
+    }
+    else
+    {
+        NS_LOG_UNCOND("Error while sending packet.");
+    }
+
+    if (m_sent < m_count || m_count == 0)
+    {
+        m_sendEvent = Simulator::Schedule(m_interval, &TcpClient::Send, this);
+    }
+}
+
+uint64_t
+TcpClient::GetTotalTx() const
+{
+    return m_totalTx;
+}
+
+void
+TcpClient::SelectInterface(Ptr<Socket> socket)
+{
+    // 여기에 rsu가 좋은지 gnb가 좋은지 고르는 함수 추가
+    m_sendSocket = socket;
+}
+
+// [핵심 수정] changeInterface() 함수
+void
+TcpClient::changeInterface()
+{
+    if (m_sendSocket == m_uuSocket)
+    {
+        NS_LOG_UNCOND(Simulator::Now().GetSeconds()
+                      << "s: ---> Switching client interface to SL socket <---");
+
+        m_sendSocket = m_slSocket;
+    }
+    else
+    {
+        NS_LOG_UNCOND(Simulator::Now().GetSeconds()
+                      << "s: ---> Switching client interface to UU socket <---");
+
+        m_sendSocket = m_uuSocket;
+    }
+}
+
+void
+TcpClient::setInterface(Ptr<NetDevice> uu, Ptr<NetDevice> sl)
+{
+    m_devSl = sl;
+    m_devUu = uu;
+}
+
 
 // udp 서버 설정===============================================================
 struct clientInfo
@@ -371,6 +388,8 @@ struct clientInfo
     uint32_t RTT;
     float_t packetLossRate;
     uint64_t totalBytesReceived;
+    //TCP
+    Ptr<Socket> socket;
 };
 
 class UdpServerk : public Application
@@ -386,12 +405,12 @@ class UdpServerk : public Application
     std::map<uint16_t, clientInfo> clients;
     void StartApplication() override;
     void StopApplication() override;
-    void SendPacket(uint16_t clientId, std::string message);
-    void HandleRead(Ptr<Socket> socket);
+
     uint16_t m_port; //!< Port on which we listen for incoming packets.
     uint8_t m_tos;   //!< The packets Type of Service
     // Ptr<Socket> m_socket;            //!< IPv4 Socket
     Ptr<Socket> m_socket6;           //!< IPv6 Socket
+
     uint64_t m_received;             //!< Number of received packets
     PacketLossCounter m_lossCounter; //!< Lost packet counter
     uint16_t m_nextClientId;
@@ -401,6 +420,15 @@ class UdpServerk : public Application
 
     /// Callbacks for tracing the packet Rx events, includes source and destination addresses
     TracedCallback<Ptr<const Packet>, const Address&, const Address&> m_rxTraceWithAddresses;
+
+    void HandleRead(Ptr<Socket> socket);
+    void SendPacket(uint16_t clientId, std::string message);
+
+    // --- TCP 동작을 위해 추가/수정된 함수들 ---
+    void HandleAccept(Ptr<Socket> s, const Address& from);
+
+    Ptr<Socket> m_listenSocket6;
+    std::map<Ptr<Socket>, uint16_t> m_socketToClientId;
 };
 
 NS_OBJECT_ENSURE_REGISTERED(UdpServerk); // GetTypeId 위에 추가
@@ -455,14 +483,38 @@ UdpServerk::StartApplication()
 {
     // 소켓 만들어서 대입
     std::cout << "udp serverk StartApplication" << std::endl;
-    m_socket6 = Socket::CreateSocket(GetNode(), TypeId(UdpSocketFactory::GetTypeId()));
+    m_listenSocket6 = Socket::CreateSocket(GetNode(), TypeId(TcpSocketFactory::GetTypeId()));
     Inet6SocketAddress local = Inet6SocketAddress(Ipv6Address::GetAny(), m_port);
 
-    if (m_socket6->Bind(local) == -1)
+    if (m_listenSocket6->Bind(local) == -1)
     {
         NS_FATAL_ERROR("Failed to bind socket");
     }
-    m_socket6->SetRecvCallback(MakeCallback(&UdpServerk::HandleRead, this));
+    m_listenSocket6->Listen();
+    m_listenSocket6->SetAcceptCallback(
+        MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
+        MakeCallback(&UdpServerk::HandleAccept, this));
+
+}
+
+void
+UdpServerk::HandleAccept(Ptr<Socket> newSocket, const Address& from)
+{
+    std::cout << "Accepted new connection from " << Inet6SocketAddress::ConvertFrom(from).GetIpv6() << std::endl;
+
+    // 1. 새 클라이언트 ID 할당
+    uint16_t newId = m_nextClientId++;
+
+    // 2. 새 클라이언트 정보 저장
+    clientInfo newClient;
+    newClient.socket = newSocket; // ★★★ 새로 생성된 소켓을 저장
+    newClient.address = from;
+    clients[newId] = newClient;
+    m_socketToClientId[newSocket] = newId;
+
+    // 3. 새로 생성된 소켓에 대한 콜백 함수들 설정
+    newSocket->SetRecvCallback(MakeCallback(&UdpServerk::HandleRead, this));
+
 }
 
 void
@@ -652,8 +704,6 @@ main(void)
 
     NodeContainer gnbNodeContainer;
     gnbNodeContainer.Create(1);
-    NodeContainer rsuNodeContainer;
-    rsuNodeContainer.Create(1);
     NodeContainer serverNodeContainer;
     serverNodeContainer.Create(1);
     NodeContainer ueNodeContainer;
@@ -661,7 +711,6 @@ main(void)
 
     Ptr<Node> pgw = epcHelper->GetPgwNode(); // ipv4, ipv6 둘다 설치되어 있음. 듀얼스택
     Ptr<Node> server = serverNodeContainer.Get(0);
-    Ptr<Node> rsu = rsuNodeContainer.Get(0);
     Ptr<Node> gnb = gnbNodeContainer.Get(0);
     Ptr<Node> ue = ueNodeContainer.Get(0);
 
@@ -669,8 +718,6 @@ main(void)
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
     mobility.Install(gnbNodeContainer);
     gnbNodeContainer.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(900, 4288, 80.0));
-    mobility.Install(rsuNodeContainer);
-    rsuNodeContainer.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(294.0, 4350.0, 70.0));
     mobility.Install(serverNodeContainer);
     serverNodeContainer.Get(0)->GetObject<MobilityModel>()->SetPosition(
         Vector(1900.0, 3800.0, 60.0));
@@ -765,200 +812,17 @@ main(void)
 
     DynamicCast<NrUeNetDevice>(ueUuNetDev.Get(0))->UpdateConfig();
 
-    // RSU, SL 기본 설정=======================================================
-    double RsuFrequencyBand = 5.89e9;
-    uint16_t RsuBandwidthBand = 400;
-    uint8_t RsunumContiguousCc = 1;
-    uint16_t RsuNumerology = 1;
-    double RsuTxPower = 23.0; // 단위dBm
-    // double Rsux = pow(10, RsuTxPower / 10); // to mW
-
-    Ptr<NrSlHelper> nrSlHelper = CreateObject<NrSlHelper>();
-    nrSlHelper->SetEpcHelper(epcHelper);
-
-    // RSU band 설정
-    CcBwpCreator RsuCcBwpCreator;
-    CcBwpCreator::SimpleOperationBandConf RsuBandConf(RsuFrequencyBand,
-                                                      RsuBandwidthBand,
-                                                      RsunumContiguousCc,
-                                                      BandwidthPartInfo::V2V_Highway);
-    OperationBandInfo RsuBand = RsuCcBwpCreator.CreateOperationBandContiguousCc(RsuBandConf);
-
-    nrHelper->InitializeOperationBand(&RsuBand);
-    BandwidthPartInfoPtrVector RsuBwp = CcBwpCreator::GetAllBwps({RsuBand});
-
-    // RSU 안테나 설정
-    nrHelper->SetUeAntennaAttribute("NumRows", UintegerValue(2));
-    nrHelper->SetUeAntennaAttribute("NumColumns", UintegerValue(1));
-    nrHelper->SetUeAntennaAttribute("AntennaElement",
-                                    PointerValue(CreateObject<IsotropicAntennaModel>()));
-
-    nrHelper->SetUePhyAttribute("TxPower", DoubleValue(RsuTxPower)); // dBm그대로 넣는듯
-
-    nrHelper->SetUeMacTypeId(NrSlUeMac::GetTypeId()); // 이거 필수임 이유는 찾아봐 todo
-    nrHelper->SetUeMacAttribute("EnableSensing", BooleanValue(false));
-    nrHelper->SetUeMacAttribute("T1", UintegerValue(2));
-    nrHelper->SetUeMacAttribute("T2", UintegerValue(33));
-    nrHelper->SetUeMacAttribute("ActivePoolId", UintegerValue(0));
-
-    uint8_t bwpIdForGbrMcptt = 0;
-    nrHelper->SetBwpManagerTypeId(TypeId::LookupByName("ns3::NrSlBwpManagerUe"));
-    // following parameter has no impact at the moment because:
-    // 1. No support for PQI based mapping between the application and the LCs
-    // 2. No scheduler to consider PQI
-    // However, till such time all the NR SL examples should use GBR_MC_PUSH_TO_TALK
-    // because we hard coded the PQI 65 in UE RRC.
-    nrHelper->SetUeBwpManagerAlgorithmAttribute("GBR_MC_PUSH_TO_TALK",
-                                                UintegerValue(bwpIdForGbrMcptt));
-
-    std::set<uint8_t> bwpIdContainer;
-    bwpIdContainer.insert(bwpIdForGbrMcptt);
-
-    std::vector<ObjectFactory> macSlFactory;
-    ObjectFactory slfactory;
-    slfactory.SetTypeId(NrSlUeMac::GetTypeId());
-    macSlFactory.push_back(slfactory);
-
-    NetDeviceContainer rsuNetDev =
-        nrHelper->InstallUeDevice(rsuNodeContainer, RsuBwp, macSlFactory);
-
-    // 설정 적용
-    for (auto it = rsuNetDev.Begin(); it != rsuNetDev.End(); ++it)
-    {
-        DynamicCast<NrUeNetDevice>(*it)->UpdateConfig();
-        // Update the RRC config.Must be called only once.
-    }
-
-    // ue안테나 설정
-    NetDeviceContainer ueSlNetDev =
-        nrHelper->InstallUeDevice(ueNodeContainer, RsuBwp, macSlFactory);
-
-    nrHelper->SetUeAntennaAttribute("NumRows", UintegerValue(1));
-    nrHelper->SetUeAntennaAttribute("NumColumns", UintegerValue(2));
-    nrHelper->SetUeAntennaAttribute("AntennaElement",
-                                    PointerValue(CreateObject<IsotropicAntennaModel>()));
-    nrHelper->GetUePhy(ueSlNetDev.Get(0), 0)->SetAttribute("TxPower", DoubleValue(ueTxPower));
-
-    DynamicCast<NrUeNetDevice>(ueSlNetDev.Get(0))->UpdateConfig(); // todo: obu sl
-
-    NetDeviceContainer SlNetDev;
-    SlNetDev.Add(ueSlNetDev);
-    SlNetDev.Add(rsuNetDev);
-
-    nrSlHelper->SetNrSlSchedulerTypeId(NrSlUeMacSchedulerFixedMcs::GetTypeId());
-    nrSlHelper->SetUeSlSchedulerAttribute("Mcs", UintegerValue(14));
-
-    nrSlHelper->PrepareUeForSidelink(SlNetDev, bwpIdContainer);
-
-    LteRrcSap::SlResourcePoolNr slResourcePoolNr;
-    // get it from pool factory
-    Ptr<NrSlCommResourcePoolFactory> ptrFactory = Create<NrSlCommResourcePoolFactory>();
-    std::vector<std::bitset<1>> slBitmap =
-        {1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1}; // The sidelink time resource bitmap
-
-    ptrFactory->SetSlTimeResources(slBitmap);
-    ptrFactory->SetSlSensingWindow(100);    //!< Start of the sensing window in milliseconds.
-    ptrFactory->SetSlSelectionWindow(5);    //!< End of the selection window in number of slots.
-    ptrFactory->SetSlFreqResourcePscch(10); // PSCCH RBs
-    ptrFactory->SetSlSubchannelSize(50);
-    ptrFactory->SetSlMaxNumPerReserve(3);
-    std::list<uint16_t> resourceReservePeriodList = {0, 100}; // in ms
-    ptrFactory->SetSlResourceReservePeriodList(resourceReservePeriodList);
-
-    LteRrcSap::SlResourcePoolNr pool = ptrFactory->CreatePool();
-    slResourcePoolNr = pool;
-
-    // Configure the SlResourcePoolConfigNr IE, which hold a pool and its id
-    LteRrcSap::SlResourcePoolConfigNr slresoPoolConfigNr;
-    slresoPoolConfigNr.haveSlResourcePoolConfigNr = true;
-    // Pool id, ranges from 0 to 15
-    uint16_t poolId = 0;
-    LteRrcSap::SlResourcePoolIdNr slResourcePoolIdNr;
-    slResourcePoolIdNr.id = poolId;
-    slresoPoolConfigNr.slResourcePoolId = slResourcePoolIdNr;
-    slresoPoolConfigNr.slResourcePool = slResourcePoolNr;
-
-    // Configure the SlBwpPoolConfigCommonNr IE, which hold an array of pools
-    LteRrcSap::SlBwpPoolConfigCommonNr slBwpPoolConfigCommonNr;
-    // Array for pools, we insert the pool in the array as per its poolId
-    slBwpPoolConfigCommonNr.slTxPoolSelectedNormal[slResourcePoolIdNr.id] = slresoPoolConfigNr;
-    // 풀을 여러개 쓸 수 있지만 우리는 영상 데이터를 전송하는 거니까 풀 하나만 쓰는게 맞을 듯
-
-    // Configure the BWP IE
-    LteRrcSap::Bwp bwp;
-    bwp.numerology = RsuNumerology;
-    bwp.symbolsPerSlots = 14; // ofdm symbol
-    bwp.rbPerRbg = 1;         // Resource block per resource block group
-    bwp.bandwidth = RsuBandwidthBand;
-
-    // Configure the SlBwpGeneric IE
-    LteRrcSap::SlBwpGeneric slBwpGeneric;
-    slBwpGeneric.bwp = bwp;
-    slBwpGeneric.slLengthSymbols = LteRrcSap::GetSlLengthSymbolsEnum(14);
-    slBwpGeneric.slStartSymbol = LteRrcSap::GetSlStartSymbolEnum(0);
-
-    // Configure the SlBwpConfigCommonNr IE
-    LteRrcSap::SlBwpConfigCommonNr slBwpConfigCommonNr;
-    slBwpConfigCommonNr.haveSlBwpGeneric = true;
-    slBwpConfigCommonNr.slBwpGeneric = slBwpGeneric;
-    slBwpConfigCommonNr.haveSlBwpPoolConfigCommonNr = true;
-    slBwpConfigCommonNr.slBwpPoolConfigCommonNr = slBwpPoolConfigCommonNr;
-
-    // Configure the SlFreqConfigCommonNr IE, which hold the array to store
-    // the configuration of all Sidelink BWP (s).
-    LteRrcSap::SlFreqConfigCommonNr slFreConfigCommonNr;
-    // Array for BWPs. Here we will iterate over the BWPs, which
-    // we want to use for SL.
-    for (const auto& it : bwpIdContainer)
-    {
-        // it is the BWP id
-        slFreConfigCommonNr.slBwpList[it] = slBwpConfigCommonNr;
-    }
-
-    // Configure the TddUlDlConfigCommon IE
-    LteRrcSap::TddUlDlConfigCommon tddUlDlConfigCommon;
-    tddUlDlConfigCommon.tddPattern = "DL|DL|DL|DL|UL|UL|UL|UL|UL|UL|";
-
-    // Configure the SlPreconfigGeneralNr IE
-    LteRrcSap::SlPreconfigGeneralNr slPreconfigGeneralNr;
-    slPreconfigGeneralNr.slTddConfig = tddUlDlConfigCommon;
-
-    // Configure the SlUeSelectedConfig IE
-    LteRrcSap::SlUeSelectedConfig slUeSelectedPreConfig;
-    slUeSelectedPreConfig.slProbResourceKeep = 0;
-    // Configure the SlPsschTxParameters IE
-    LteRrcSap::SlPsschTxParameters psschParams;
-    psschParams.slMaxTxTransNumPssch = 5;
-    // Configure the SlPsschTxConfigList IE
-    LteRrcSap::SlPsschTxConfigList pscchTxConfigList;
-    pscchTxConfigList.slPsschTxParameters[0] = psschParams;
-    slUeSelectedPreConfig.slPsschTxConfigList = pscchTxConfigList;
-
-    /*
-     * Finally, configure the SidelinkPreconfigNr This is the main structure
-     * that needs to be communicated to NrSlUeRrc class
-     */
-    LteRrcSap::SidelinkPreconfigNr slPreConfigNr;
-    slPreConfigNr.slPreconfigGeneral = slPreconfigGeneralNr;
-    slPreConfigNr.slUeSelectedPreConfig = slUeSelectedPreConfig;
-    slPreConfigNr.slPreconfigFreqInfoList[0] = slFreConfigCommonNr;
-
-    nrSlHelper->InstallNrSlPreConfiguration(SlNetDev, slPreConfigNr);
-
-
     // 진짜 시작todo:
     // ===============================================================================
 
     NodeContainer nodes(server);
-    NodeContainer routers(pgw, rsu);
+    NodeContainer routers(pgw);
 
     // 여기서 p2p를 쓸지 csma를 쓸지 결정해야할듯
     PointToPointHelper p2ph;
     p2ph.SetDeviceAttribute("DataRate", StringValue("100Mbps"));
     p2ph.SetChannelAttribute("Delay", StringValue("10ms"));
     NetDeviceContainer pgwToServerNetDev = p2ph.Install(pgw, server);
-    NetDeviceContainer rsuToServerNetDev = p2ph.Install(rsu, server);
-    p2ph.EnablePcap("rsu-to-server", rsuToServerNetDev.Get(0), true);
 
     // 인터넷 설정
     InternetStackHelper internet;
@@ -970,12 +834,6 @@ main(void)
     // ip설정
     Ipv6AddressHelper ipv6h;
 
-    // rsu server
-    ipv6h.SetBase("fd00:1::", Ipv6Prefix(64));
-    Ipv6InterfaceContainer iic1 = ipv6h.Assign(rsuToServerNetDev);
-    iic1.SetForwarding(0, true);
-
-    Ipv6Address rsuServerIpv6 = iic1.GetAddress(1, 1);
 
     // pgw server
     ipv6h.SetBase("fd00:3::", Ipv6Prefix(64));
@@ -986,55 +844,15 @@ main(void)
     Ipv6InterfaceContainer ueUuIface = epcHelper->AssignUeIpv6Address(ueUuNetDev);
     nrHelper->AttachToClosestEnb(ueUuNetDev, gnbNetDev); // 이거는 eps베어러 생성 기지국과 연결해줌
 
-    Ipv6InterfaceContainer ueSlIface = epcHelper->AssignUeIpv6Address(SlNetDev);
-    ueSlIface.SetForwarding(1, true);
-    Ipv6Address temp = ueSlIface.GetAddress(1, 1);
-
-
-    // sidelink 무선 베어러 설정
-    Ptr<LteSlTft> tft;
-    uint32_t dstL2Id = 255;
-    Time delayBudget = Seconds(0);
-
-    SidelinkInfo slInfo;
-    slInfo.m_castType = SidelinkInfo::CastType::Groupcast;
-    slInfo.m_dstL2Id = dstL2Id;
-    slInfo.m_rri = MilliSeconds(100);
-    slInfo.m_pdb = delayBudget;
-    slInfo.m_harqEnabled = true;
-    Ipv6Address groupAddress6("ff0e::1");
-
-    tft = Create<LteSlTft>(LteSlTft::Direction::BIDIRECTIONAL, groupAddress6, slInfo);
-    nrSlHelper->ActivateNrSlBearer(Seconds(0.0), SlNetDev, tft);
-
-    // // Uu PHY에서 RSRP 측정 콜백 연결 (gNb와의 Uu 통신)
-    Ptr<NrUeNetDevice> ueUuDev = DynamicCast<NrUeNetDevice>(ueUuNetDev.Get(0));
-    // Get the first PHY (BWP) from the Uu NetDevice
-    Ptr<NrUePhy> ueUuPhy = ueUuDev->GetPhy(0);
-   // ueUuPhy->TraceConnectWithoutContext("ReportRsrp", MakeCallback(&UeMeasCallback));
-
-    // Uu PHY에서 RSRP 측정 콜백 연결 (gNb와의 Uu 통신)
-    Ptr<NrUeNetDevice> rsutemp = DynamicCast<NrUeNetDevice>(rsuNetDev.Get(0));
-    // Get the first PHY (BWP) from the Uu NetDevice
-    Ptr<NrUePhy> rsutemp2 = rsutemp->GetPhy(0);
-    rsutemp2->TraceConnectWithoutContext("ReportSlRsrp", MakeCallback(&UeSlMeasCallback));
-
-    for (uint32_t i = 0; i < SlNetDev.GetN (); ++i)
-    {
-        Ptr<NrUeNetDevice> ueDev = DynamicCast<NrUeNetDevice> (SlNetDev.Get (i));
-        Ptr<NrUePhy>       phy   = ueDev->GetPhy (0);
-        phy->GetNrSlUeCphySapProvider ()->EnableUeSlRsrpMeasurements ();
-    }
 
 
 
     //  todo: 앱설치 =============================================================
     ApplicationContainer ueAppContainer;
     ApplicationContainer serverAppContainer;
-    ApplicationContainer rsuAppContainer;
+
 
     u_int16_t serverPort = 5000;
-    u_int16_t rsuSlPort = 6000;
 
     // u_int16_t clientPort = 4000;
     // AdaptiveUdpClientk adaptiveUdpClientk(rsuIpv6,serverIpv6, serverPort);
@@ -1046,12 +864,11 @@ main(void)
     serverApp->SetStartTime(Seconds(1.0));
     serverApp->SetStopTime(simTime);
 
-    Ptr<UdpClient> clientApp = CreateObject<UdpClient>();
+    Ptr<TcpClient> clientApp = CreateObject<TcpClient>();
     clientApp->SetAttribute("MaxPackets", UintegerValue(3));
     clientApp->SetAttribute("Interval", TimeValue(Seconds(1.0)));
     clientApp->SetAttribute("PacketSize", UintegerValue(100));
-    clientApp->SetAttribute("slServerAddress",AddressValue(groupAddress6));
-    clientApp->SetAttribute("slServerPort",UintegerValue(rsuSlPort));
+
     clientApp->SetAttribute("uuServerAddress",AddressValue(gnbServerIpv6));
     clientApp->SetAttribute("uuServerPort",UintegerValue(serverPort));
     clientApp->SetAttribute("recvPort",UintegerValue(8080));
@@ -1064,18 +881,6 @@ main(void)
     // todo:여기다가포트랑 주소 넣어야함
     // clientApp->setAddressSlUu(gnbServerIpv6, serverPort, groupAddress6, rsuSlPort);
 
-    // rsu앱 설정
-    Ptr<UdpRelay> relayApp = CreateObject<UdpRelay>();
-    rsu->AddApplication(relayApp);
-    relayApp->SetAttribute("InPort", UintegerValue(rsuSlPort));          // 수신 포트 설정
-    relayApp->SetAttribute("OutAddress", AddressValue(rsuServerIpv6)); // 최종 서버 주소 설정
-    relayApp->SetAttribute("OutPort", UintegerValue(serverPort));      // 최종 서버 포트 설정
-    relayApp->SetStartTime(Seconds(1.0));
-    relayApp->SetStopTime(simTime);
-
-    //그룹 캐스트 설정 (애플리케이션단)
-    rsuAppContainer.Add(relayApp);
-    rsuAppContainer.Get(0)->GetNode()->GetObject<Ipv6L3Protocol>()->AddMulticastAddress(groupAddress6);
 
     // ue pgw 라우팅
     Ipv6StaticRoutingHelper ipv6RoutingHelper;
@@ -1093,20 +898,7 @@ main(void)
     //                                  Ipv6Address::ConvertFrom(temp),
     //                                  slInterfaceIndex);
 
-    // ue pgw 라우팅 설정 이후에 다음 코드를 추가합니다.
-    Ptr<Ipv6StaticRouting> ueStaticRouting = ipv6RoutingHelper.GetStaticRouting(ue->GetObject<Ipv6>());
 
-    // Sidelink NetDevice의 인터페이스 인덱스를 가져옵니다.
-    uint32_t slInterfaceIndex = ue->GetObject<Ipv6>()->GetInterfaceForDevice(ueSlNetDev.Get(0));
-
-    // Groupcast 주소(ff0e::1)로 향하는 모든 트래픽은 Sidelink 인터페이스로 보내도록 명시적인 경로를 추가합니다.
-    ueStaticRouting->AddNetworkRouteTo(groupAddress6, Ipv6Prefix(128), slInterfaceIndex);
-
-    std::cout << "Added static route for Groupcast address via Sidelink interface " << slInterfaceIndex << std::endl;
-
-    // 인터페이스 바꾸는거 그냥 예시
-    clientApp->setInterface(ueUuNetDev.Get(0), ueSlNetDev.Get(0));
-    Simulator::Schedule(Seconds(6.0), &UdpClient::changeInterface, clientApp);
 
     // Ptr<Ipv6> ipv6 = ue->GetObject<Ipv6>();
     for (uint32_t ifIndex = 0; ifIndex < ipv6->GetNInterfaces(); ++ifIndex)
@@ -1118,15 +910,12 @@ main(void)
                       << ifAddr.GetAddress() << "/" << ifAddr.GetPrefix() << std::endl;
         }
     }
-    std::cout << "rsutoserver server ip : " << rsuServerIpv6 << std::endl;
-    std::cout << "uetorsu rsu ip" << temp << std::endl;
+
     // main 함수 내부, 인터넷 스택 설치 이후
 
     // RSU 노드의 IPv6 L3 프로토콜의 "Rx" Trace Source에 콜백 함수를 연결합니다.
     // "Rx"는 IP 계층에서 패킷을 수신하는 이벤트입니다.
-    Config::ConnectWithoutContext("/NodeList/" + std::to_string(rsu->GetId()) +
-                                      "/$ns3::Ipv6L3Protocol/Rx",
-                                  MakeCallback(&Ipv6PacketTraceAtRsu));
+
     Config::ConnectWithoutContext("/NodeList/" + std::to_string(pgw->GetId()) +
                                       "/$ns3::Ipv6L3Protocol/Rx",
                                   MakeCallback(&Ipv6PacketTraceAtPgw));
@@ -1141,7 +930,7 @@ main(void)
     //     "$ns3::NrUeNetDevice/ComponentCarrierMapUe/*/NrUePhy/ReportPowerSpectralDensity",
     //     MakeCallback(&psdCallback));
 
-    // Simulator::Schedule(Seconds(0.0), &PrintUeInfo, ueNodeContainer.Get(0));
+    Simulator::Schedule(Seconds(0.0), &PrintUeInfo, ueNodeContainer.Get(0));
     // Ptr<NetDevice> dev = ueUuNetDev.Get (0);
     // Ptr<NrUeNetDevice> ueDev = DynamicCast<NrUeNetDevice> (dev);
     // Ptr<NrSpectrumPhy> spectrumPhy = ueDev->GetPhy (0)->GetSpectrumPhy ();

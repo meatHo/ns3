@@ -422,7 +422,6 @@ class UdpServerk : public Application
     TracedCallback<Ptr<const Packet>, const Address&, const Address&> m_rxTraceWithAddresses;
 
     void HandleRead(Ptr<Socket> socket);
-    void SendPacket(uint16_t clientId, std::string message);
 
     // --- TCP 동작을 위해 추가/수정된 함수들 ---
     void HandleAccept(Ptr<Socket> s, const Address& from);
@@ -491,30 +490,29 @@ UdpServerk::StartApplication()
         NS_FATAL_ERROR("Failed to bind socket");
     }
     m_listenSocket6->Listen();
+    m_listenSocket6->ShutdownSend();
     m_listenSocket6->SetAcceptCallback(
         MakeNullCallback<bool, Ptr<Socket>, const Address&>(),
         MakeCallback(&UdpServerk::HandleAccept, this));
 
 }
 
-void
-UdpServerk::HandleAccept(Ptr<Socket> newSocket, const Address& from)
+// UdpServerk 클래스 내부
+void UdpServerk::HandleAccept(Ptr<Socket> newSocket, const Address& from)
 {
-    std::cout << "Accepted new connection from " << Inet6SocketAddress::ConvertFrom(from).GetIpv6() << std::endl;
-
-    // 1. 새 클라이언트 ID 할당
+    NS_LOG_UNCOND("✅ Server: Accepted new connection from " << Inet6SocketAddress::ConvertFrom(from).GetIpv6());
     uint16_t newId = m_nextClientId++;
-
-    // 2. 새 클라이언트 정보 저장
     clientInfo newClient;
-    newClient.socket = newSocket; // ★★★ 새로 생성된 소켓을 저장
+    newClient.socket = newSocket;
     newClient.address = from;
+    newClient.connectionTime = Simulator::Now();
+    newClient.totalBytesReceived = 0;
+
     clients[newId] = newClient;
     m_socketToClientId[newSocket] = newId;
 
-    // 3. 새로 생성된 소켓에 대한 콜백 함수들 설정
+    // 새로 생성된 소켓에 데이터 수신 콜백을 설정합니다.
     newSocket->SetRecvCallback(MakeCallback(&UdpServerk::HandleRead, this));
-
 }
 
 void
@@ -539,111 +537,34 @@ UdpServerk::SetPacketWindowSize(uint16_t size)
     m_lossCounter.SetBitMapSize(size);
 }
 
-void
-UdpServerk::HandleRead(Ptr<Socket> socket)
+void UdpServerk::HandleRead(Ptr<Socket> socket)
 {
+    // 소켓을 이용해 클라이언트 ID를 찾습니다.
+    uint16_t clientId = m_socketToClientId[socket];
+
     Ptr<Packet> packet;
-    Address from;
-    Address localAddress;
-    while ((packet = socket->RecvFrom(from)))
+    while ((packet = socket->Recv()))
     {
-        bool clientFound = false;
-        uint16_t clientId;
-        for (const auto& pair : clients)
+        if (packet->GetSize() == 0) // 연결 종료 감지
         {
-            if (pair.second.address == from)
-            {
-                clientFound = true;
-                clientId = pair.first;
-                from = clients[clientId].address;
+            NS_LOG_UNCOND("👋 Server: Client " << clientId << " disconnected.");
 
-                break;
-            }
-        }
-        // 새 클라이언트 저장
-        if (!clientFound)
-        {
-            std::cout << "new client detected" << std::endl;
-            uint16_t newId = m_nextClientId++;
-            clientInfo newClient;
-            newClient.address = from;
-            newClient.lastSequenceNum = 0;
-            newClient.connectionTime = Simulator::Now();
-            newClient.packetLossRate = 0;
-            newClient.RTT = 0;
-            newClient.totalBytesReceived = 0;
-            clients[newId] = newClient;
-            clientId = newId;
+            // 두 개의 map에서 모두 해당 클라이언트 정보를 제거합니다.
+            clients.erase(clientId);
+            m_socketToClientId.erase(socket);
+            break;
         }
 
-        // 수신
-        socket->GetSockName(localAddress);
-        m_rxTrace(packet);
-        m_rxTraceWithAddresses(packet, from, localAddress);
-        if (packet->GetSize() > 0)
-        {
-            uint32_t receivedSize = packet->GetSize();
-            SeqTsHeader seqTs;
-            packet->RemoveHeader(seqTs);
-            uint32_t currentSequenceNumber = seqTs.GetSeq();
-            if (InetSocketAddress::IsMatchingType(from))
-            {
-                std::cout << "TraceDelay: RX " << receivedSize << " bytes from "
-                          << InetSocketAddress::ConvertFrom(from).GetIpv4()
-                          << "port: " << InetSocketAddress::ConvertFrom(from).GetPort()
-                          << " Sequence Number: " << currentSequenceNumber
-                          << " Uid: " << packet->GetUid() << " TXtime: " << seqTs.GetTs()
-                          << " RXtime: " << Simulator::Now()
-                          << " Delay: " << Simulator::Now() - seqTs.GetTs() << std::endl;
-            }
-            else if (Inet6SocketAddress::IsMatchingType(from))
-            {
-                std::cout << "TraceDelay: RX " << receivedSize << " bytes from "
-                          << Inet6SocketAddress::ConvertFrom(from).GetIpv6()
-                          << " port: " << Inet6SocketAddress::ConvertFrom(from).GetPort()
-                          << " Sequence Number: " << currentSequenceNumber
-                          << " Uid: " << packet->GetUid() << " TXtime: " << seqTs.GetTs()
-                          << " RXtime: " << Simulator::Now()
-                          << " Delay: " << Simulator::Now() - seqTs.GetTs() << std::endl;
-            }
+        // 해당 클라이언트의 수신 데이터양 업데이트
+        clients[clientId].totalBytesReceived += packet->GetSize();
+        NS_LOG_UNCOND("📦 Server: Received " << packet->GetSize() << " bytes from Client " << clientId
+                     << ". Total received: " << clients[clientId].totalBytesReceived << " bytes.");
 
-            m_lossCounter.NotifyReceived(currentSequenceNumber);
-            m_received++;
-
-            SendPacket(clientId, "good");
-            std::cout << "sent to client - clientId : " << clientId << std::endl;
-        }
+        // 에코 응답
+        socket->Send(packet->Copy());
     }
 }
 
-void
-UdpServerk::SendPacket(uint16_t clientId, std::string message)
-{
-    auto it = clients.find(clientId);
-
-    if (it == clients.end())
-    {
-        std::cout << "SendPacket failed: Client with ID " << clientId << " not found." << std::endl;
-        return;
-    }
-
-    Address destAddress = it->second.address;
-    Ptr<Packet> packet = Create<Packet>((uint8_t*)message.c_str(), message.length());
-
-    // if (InetSocketAddress::IsMatchingType(destAddress))
-    // {
-    //     // IPv4 주소일 경우 m_socket 사용
-    //     m_socket->SendTo(packet, 0, destAddress);
-    //     NS_LOG_INFO("Sent an IPv4 packet to client ID " << clientId);
-    // }
-    if (Inet6SocketAddress::IsMatchingType(destAddress))
-    {
-        // IPv6 주소일 경우 m_socket6 사용
-        m_socket6->SendTo(packet, 0, destAddress);
-        std::cout << "Sent an IPv6 packet to client ID " << clientId << std::endl;
-        ;
-    }
-}
 
 int
 main(void)
@@ -723,7 +644,7 @@ main(void)
         Vector(1900.0, 3800.0, 60.0));
 
     mobility.Install(ueNodeContainer);
-    ueNodeContainer.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(294.0, 4315.03, 59));
+    ueNodeContainer.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(900.0, 4315.03, 59));
 
     // mobility.SetMobilityModel("ns3::WaypointMobilityModel");
     // mobility.Install(ueNodeContainer);
@@ -865,22 +786,15 @@ main(void)
     serverApp->SetStopTime(simTime);
 
     Ptr<TcpClient> clientApp = CreateObject<TcpClient>();
-    clientApp->SetAttribute("MaxPackets", UintegerValue(3));
+    ue->AddApplication(clientApp);
+    clientApp->SetAttribute("MaxPackets", UintegerValue(7));
     clientApp->SetAttribute("Interval", TimeValue(Seconds(1.0)));
     clientApp->SetAttribute("PacketSize", UintegerValue(100));
-
     clientApp->SetAttribute("uuServerAddress",AddressValue(gnbServerIpv6));
     clientApp->SetAttribute("uuServerPort",UintegerValue(serverPort));
     clientApp->SetAttribute("recvPort",UintegerValue(8080));
-
-
-
-    ue->AddApplication(clientApp);
-    clientApp->SetStartTime(Seconds(5.0));
+    clientApp->SetStartTime(Seconds(3.0));
     clientApp->SetStopTime(simTime);
-    // todo:여기다가포트랑 주소 넣어야함
-    // clientApp->setAddressSlUu(gnbServerIpv6, serverPort, groupAddress6, rsuSlPort);
-
 
     // ue pgw 라우팅
     Ipv6StaticRoutingHelper ipv6RoutingHelper;
@@ -898,6 +812,19 @@ main(void)
     //                                  Ipv6Address::ConvertFrom(temp),
     //                                  slInterfaceIndex);
 
+    // 2. 서버 -> UE 경로 설정 (돌아오는 길) - 공식 예제의 핵심 로직
+    // "서버야, UE 네트워크로 가는 패킷은 PGW로 보내라"
+    Ptr<Ipv6StaticRouting> serverStaticRouting =
+        ipv6RoutingHelper.GetStaticRouting(server->GetObject<Ipv6>());
+
+    // 서버에게 "7777:f00d::/64 대역(UE 네트워크)으로 가려면,
+    // 다음 목적지(Next Hop)는 fd00:3::1 (PGW)이다" 라고 알려줌
+    Ipv6Address ueNetworkAddress("7777:f00d::");
+    Ipv6Prefix ueNetworkPrefix(64);
+    Ipv6Address pgwAddressOnP2PLink("fd00:3::1");
+
+    // AddNetworkRouteTo(목적지 네트워크, 목적지 네트워크 Prefix, 다음 라우터 주소)
+    serverStaticRouting->AddNetworkRouteTo(ueNetworkAddress, ueNetworkPrefix, 1);
 
 
     // Ptr<Ipv6> ipv6 = ue->GetObject<Ipv6>();
@@ -969,6 +896,3 @@ main(void)
     Simulator::Run();
     Simulator::Destroy();
 }
-
-
-

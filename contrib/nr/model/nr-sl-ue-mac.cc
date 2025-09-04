@@ -151,7 +151,6 @@ void
 NrSlUeMac::SchedNrSlConfigInd(uint32_t dstL2Id, const NrSlGrant& grant)
 {
     NS_LOG_FUNCTION(this << dstL2Id);
-
     NS_LOG_INFO("Received grant to dstL2Id " << dstL2Id << " on HARQ ID " << +grant.harqId
                                              << " containing " << grant.slotAllocations.size()
                                              << " slots and RRI " << grant.rri.As(Time::MS));
@@ -1240,7 +1239,6 @@ NrSlUeMac::DoNrSlSlotIndication(const SfnSf& sfn)
                                       currentGrant.tbSize,
                                       currentSlot.dstL2Id);
                     pktSciF1a->AddPacketTag(tag);
-
                     NS_LOG_DEBUG("Sending PSCCH MAC PDU dstL2Id: "
                                  << currentSlot.dstL2Id << " harqId: " << +currentGrant.harqId);
                     m_nrSlUePhySapProvider->SendPscchMacPdu(pktSciF1a);
@@ -1435,6 +1433,7 @@ void
 NrSlUeMac::DoAddNrSlLc(const NrSlUeCmacSapProvider::SidelinkLogicalChannelInfo& slLcInfo,
                        NrSlMacSapUser* msu)
 {
+    NS_LOG_UNCOND("DoAddNrSlLc");
     NS_LOG_FUNCTION(this << +slLcInfo.lcId << slLcInfo.srcL2Id << slLcInfo.dstL2Id);
     NS_LOG_INFO("IMSI " << GetImsi() << " adding LC from " << slLcInfo.srcL2Id << " to "
                         << slLcInfo.dstL2Id << " lcId " << +slLcInfo.lcId << " dynamic "

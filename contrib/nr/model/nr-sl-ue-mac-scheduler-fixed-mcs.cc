@@ -384,10 +384,14 @@ NrSlUeMacSchedulerFixedMcs::TxResourceReselectionCheck(const SfnSf& sfn,
 {
     NS_LOG_FUNCTION(this << sfn << dstL2Id << +lcId);
     const auto itDstInfo = m_dstMap.find(dstL2Id);
-    const auto& lcgMap = itDstInfo->second->GetNrSlLCG();
+    const auto& lcgMap = itDstInfo->second->GetNrSlLCG();//NrSlUeMacSchedulerDstInfo가 second
+    //여기서 반환된건 결국 std::unordered_map<uint8_t, NrSlLCGPtr> m_nrSlLCG;
+    //즉 로지컬 채널을 다 불러온 다음 여기서 순회하면서
 
     bool isLcDynamic = lcgMap.begin()->second->IsLcDynamic(lcId);
     uint32_t lcBufferSize = lcgMap.begin()->second->GetTotalSizeOfLC(lcId);
+    //이거 실행하면 return m_txQueueSize + m_retxQueueSize + m_statusPduSize; 이거나옴.
+
     NS_LOG_DEBUG("LcId " << +lcId << " buffer size " << lcBufferSize);
     if (lcBufferSize == 0)
     {

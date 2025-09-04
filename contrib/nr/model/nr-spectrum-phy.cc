@@ -2034,7 +2034,7 @@ void
 NrSpectrumPhy::StartTxSlDataFrames(const Ptr<PacketBurst>& pb, Time duration)
 {
     NS_LOG_FUNCTION(this << " state: " << m_state);
-
+    // NS_LOG_UNCOND("NrSpectrumPhy::StartTxSlDataFrames");
     switch (m_state)
     {
     case RX_DATA:

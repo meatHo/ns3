@@ -645,7 +645,6 @@ NrGnbMac::DoSlotUlIndication(const SfnSf& sfnSf, LteNrTddSlotType type)
 {
     NS_LOG_FUNCTION(this);
     NS_LOG_LOGIC("Perform things on UL, slot on the air: " << sfnSf);
-
     // --- UPLINK ---
     // Send UL-CQI info to the scheduler
     for (auto& i : m_ulCqiReceived)

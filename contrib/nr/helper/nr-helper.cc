@@ -590,7 +590,7 @@ NrHelper::CreateUePhy(const Ptr<Node>& n,
     }
     channelPhy->SetIsEnb(false);
     channelPhy->SetDevice(dev); // each NrSpectrumPhy should have a pointer to device
-    if (bwp->m_centralFrequency==3.5e9)
+    if (bwp->m_centralFrequency==3.5e9)// koh icons 추가한것.
     {
         channelPhy->SetPhyRxPssCallback(MakeCallback(&NrUePhy::ReceivePss, phy));
     }else

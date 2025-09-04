@@ -1482,7 +1482,7 @@ NrUePhy::StartEventLoop(uint16_t frame, uint8_t subframe, uint16_t slot)
         DoSetInitialBandwidth();
     }
 
-    NS_LOG_INFO("PHY starting. Configuration: "
+    NS_LOG_UNCOND("PHY starting. Configuration: "
                 << std::endl
                 << "\t TxPower: " << m_txPower << " dBm" << std::endl
                 << "\t NoiseFigure: " << m_noiseFigure << std::endl
@@ -2259,7 +2259,7 @@ NrUePhy::PhyPsschPduReceived(const Ptr<PacketBurst>& pb, const SpectrumValue& ps
         double rsrpWatt = GetSidelinkRsrp(psd).first;
 
         // We only monitor RSRP for relay discovery messages (LCID = 4)
-        // if ((tag.GetLcid() == 4))
+        // if ((tag.GetLcid() == 4)) icons koh
         // {
             // NS_LOG_UNCOND("실행됨2?");
             // Store RSRP for L1 filtering
@@ -2372,6 +2372,7 @@ NrUePhy::ReportUeSlRsrpMeasurements()
         }
 
         // Notify RRC
+        // icons koh
         //m_nrSlUeCphySapUser->ReceiveUeSlRsrpMeasurements(rsrpList);
 
         // Schedule next L1 filtering

@@ -34,14 +34,14 @@ struct WaypointData
 void
 UeMeasCallback(uint16_t cellId, uint16_t IMSI, uint16_t RNTI, double RSRP, uint8_t BWPId)
 {
-    std::cout << "📶Uu [Meas] cellId=" << cellId << " IMSI=" << IMSI << " BWPId=" << BWPId
+    std::cout << "📶 [Meas] cellId=" << cellId << " IMSI=" << IMSI << " BWPId=" << BWPId
               << "  RNTI=" << RNTI << " RSRP=" << RSRP << " dB\n";
 }
 
 void
 UeSlMeasCallback(uint16_t RNTI, uint32_t L2ID, double RSRP)
 {
-    std::cout << "📶Sl [Meas] RNTI=" << RNTI << " L2ID=" << L2ID << " RSRP=" << RSRP << " dB\n";
+    std::cout << "📶 [Meas] RNTI=" << RNTI << " L2ID=" << L2ID << " RSRP=" << RSRP << " dB\n";
 }
 
 #include <ns3/spectrum-model.h>
@@ -56,173 +56,6 @@ UeSlMeasCallback(uint16_t RNTI, uint32_t L2ID, double RSRP)
 
 
 
-void
-UeRssiPerProcessedChunk(Ptr<SpectrumPhy> phy, double rssidBm)
-{
-    static uint8_t cnt = 0;
-    static double sum = 0.0;
-    static double totalsum = 0.0;
-    static uint16_t totalcnt=0;
-    cnt++;
-    sum += rssidBm;
-
-    if (cnt == 50)
-    {
-        double avg = sum / cnt;
-
-        Ptr<NrSpectrumPhy> nrPhy = DynamicCast<NrSpectrumPhy>(phy);
-        Ptr<NetDevice> dev = nrPhy->GetDevice();
-        Ptr<Node> node = dev->GetNode();
-
-        uint32_t nodeId  = node->GetId();
-        uint32_t devIdx  = dev->GetIfIndex();
-
-        uint16_t cellId  = nrPhy->GetCellId();
-        //uint16_t rnti    = nrPhy->GetRnti();
-        uint16_t bwpId   = nrPhy->GetBwpId();
-
-        std::cout << "[Uu Node "   << nodeId
-                  << " | Dev "   << devIdx
-                  << " | Cell "  << cellId
-                  //<< " | RNTI "  << rnti
-                  << " | BWP "   << bwpId
-                  << "] 10‑Chunk Avg RSSI = "
-                  << avg << " dBm"
-                  << std::endl;
-        totalsum += sum;
-        totalcnt += cnt;
-        cnt = 0;
-        sum = 0.0;
-    }
-}
-
-void
-UeSlRssiPerProcessedChunk(Ptr<SpectrumPhy> phy, double rssidBm)
-{
-    static uint8_t cnt = 0;
-    static double sum = 0.0;
-    static double totalsum = 0.0;
-    static uint16_t totalcnt=0;
-    cnt++;
-    sum += rssidBm;
-
-    if (cnt == 50)
-    {
-        double avg = sum / cnt;
-
-        Ptr<NrSpectrumPhy> nrPhy = DynamicCast<NrSpectrumPhy>(phy);
-        Ptr<NetDevice> dev = nrPhy->GetDevice();
-        Ptr<Node> node = dev->GetNode();
-
-        uint32_t nodeId  = node->GetId();
-        uint32_t devIdx  = dev->GetIfIndex();
-
-        uint16_t cellId  = nrPhy->GetCellId();
-        //uint16_t rnti    = nrPhy->GetRnti();
-        uint16_t bwpId   = nrPhy->GetBwpId();
-
-        std::cout << "[SideLink Node "   << nodeId
-                  << " | Dev "   << devIdx
-                  << " | Cell "  << cellId
-                  //<< " | RNTI "  << rnti
-                  << " | BWP "   << bwpId
-                  << "] 10‑Chunk Avg RSSI = "
-                  << avg << " dBm"
-                  << std::endl;
-        totalsum += sum;
-        totalcnt += cnt;
-        cnt = 0;
-        sum = 0.0;
-    }
-}
-
-
-
-void
-printRssi(Ptr<const SpectrumValue> psd)
-{
-    // 스펙트럼 모델을 통해 sub‑carrier 간격(Hz)을 구함
-    Ptr<const SpectrumModel> sm = psd->GetSpectrumModel();
-    double binWidth = sm->Begin()->fh - sm->Begin()->fl;
-
-    // PSD[W/Hz] × binWidth → 각 bin 전력[W], 모두 합산
-    double powerW = Sum(*psd * binWidth);
-
-    // W → dBm 변환
-    double rssiDbm = 10.0 * std::log10(powerW * 1e3);
-
-    std::cout << "[printRssi] RSSI = " << rssiDbm << " dBm" << std::endl << std::endl;
-}
-
-void
-psdCallback(const SfnSf& sfnSf,
-            Ptr<const SpectrumValue> v,
-            const Time& phyTime,
-            uint16_t rnti,
-            uint64_t imsi,
-            uint16_t bwpId,
-            uint16_t cellId)
-{
-    // 1) 시뮬레이션 현재 시각(Time)과 SFN/Subframe
-    std::cout << "[PSD Callback] SimTime="
-              << Simulator::Now().GetSeconds()
-              //<< "s, SFN=" << sfnSf.m_sfn << ", SF=" << sfnSf.m_sf
-              << ", PhyTime=" << phyTime.GetSeconds() << "s" << std::endl;
-
-    // 2) 식별자 정보
-    std::cout << "  RNTI=" << rnti << ", IMSI=" << imsi << ", BWP=" << bwpId
-              << ", CellId=" << cellId << std::endl;
-
-    // 3) PSD 벡터 값 출력 (Hz당 W 단위)
-    std::cout << "  PSD values (W/Hz):";
-    uint32_t idx = 0;
-    for (auto it = v->ConstValuesBegin(); it != v->ConstValuesEnd(); ++it, ++idx)
-    {
-        // 8개 단위로 줄 바꿈
-        if (idx % 8 == 0)
-            std::cout << std::endl << "   ";
-        std::cout << *it;
-        if (it + 1 != v->ConstValuesEnd())
-            std::cout << "\t";
-    }
-    printRssi(v);
-}
-
-void
-RxDataCallback(const SfnSf& sfnSf,
-               Ptr<const SpectrumValue> rxPsd,
-               const Time& duration,
-               uint16_t bwpId,
-               uint16_t cellId)
-{
-    // 1) 스펙트럼 모델에서 주파수 분할폭(Hz) 가져오기
-    Ptr<const SpectrumModel> sm = rxPsd->GetSpectrumModel();
-    double binWidth = sm->Begin()->fh - sm->Begin()->fl; // 예: subcarrier 간격
-
-    // 2) PSD 벡터 × binWidth → 각 bin별 W 단위 전력 → 모두 합산
-    double powerW = Sum(*rxPsd * binWidth);
-
-    // 3) W → dBm 변환: 10·log10(powerW·1000)
-    double rssiDbm = 10.0 * std::log10(powerW * 1e3);
-
-    std::cout << "RSSI = " << rssiDbm << " dBm (BWP " << bwpId << ", Cell " << cellId << ")\n";
-
-    // 여기서 강화학습 환경으로 넘기시면 됩니다.
-}
-
-// UE의 위치와 속도를 출력하는 함수
-void
-PrintUeInfo(Ptr<Node> ueNode)
-{
-    Ptr<MobilityModel> mob = ueNode->GetObject<MobilityModel>();
-    Vector pos = mob->GetPosition();
-    Vector vel = mob->GetVelocity();
-
-    NS_LOG_UNCOND("Time: " << Simulator::Now().GetSeconds() << "s");
-    NS_LOG_UNCOND("UE Position: x=" << pos.x << ", y=" << pos.y << ", z=" << pos.z);
-    NS_LOG_UNCOND("UE Velocity: x=" << vel.x << ", y=" << vel.y << ", z=" << vel.z << " (m/s)");
-    Simulator::Schedule(Seconds(1.0), &PrintUeInfo, ueNode);
-}
 
 // 패킷 정보를 출력할 콜백 함수
 void
@@ -596,55 +429,10 @@ UdpServerk::SendPacket(uint16_t clientId, std::string message)
 int
 main(void)
 {
-    // 1. CSV 파일 읽기
-    // ==========================================================
-    std::vector<WaypointData> waypoints;
-    std::string csvFileName = "/home/kiho/ns-3-dev/scratch/final_3d_trace.csv";
-    std::ifstream file(csvFileName);
 
-    if (!file.is_open())
-    {
-        std::cout << "Could not open CSV file: " << csvFileName << std::endl;
-        return 2;
-    }
-
-    std::string line;
-    // 헤더 라인 무시
-    std::getline(file, line);
-
-    double maxTime = 0.0;
-    while (std::getline(file, line))
-    {
-        std::stringstream ss(line);
-        std::string value;
-        WaypointData data;
-
-        // 각 열 파싱
-        std::getline(ss, value, ','); // time
-        data.time = std::stod(value);
-        std::getline(ss, value, ','); // vehicle_id (skip)
-        std::getline(ss, value, ','); // x
-        data.x = std::stod(value);
-        std::getline(ss, value, ','); // y
-        data.y = std::stod(value);
-        std::getline(ss, value, ','); // z
-        data.z = std::stod(value);
-        std::getline(ss, value, ','); // speed
-        data.speed = std::stod(value);
-        std::getline(ss, value, ','); // lon (skip)
-        std::getline(ss, value, ','); // lat (skip)
-
-        waypoints.push_back(data);
-        if (data.time > maxTime)
-        {
-            maxTime = data.time;
-        }
-    }
-    file.close();
-    NS_LOG_UNCOND("Successfully read " << waypoints.size() << " waypoints from CSV.");
 
     // ns3 세팅 시작
-    Time simTime = Seconds(93);
+    Time simTime = Seconds(10);
 
     Ptr<NrPointToPointEpcHelper> epcHelper = CreateObject<NrPointToPointEpcHelper>();
     Ptr<NrHelper> nrHelper = CreateObject<NrHelper>();
@@ -675,19 +463,9 @@ main(void)
     serverNodeContainer.Get(0)->GetObject<MobilityModel>()->SetPosition(
         Vector(1900.0, 3800.0, 60.0));
 
-
-    mobility.SetMobilityModel("ns3::WaypointMobilityModel");
     mobility.Install(ueNodeContainer);
     ueNodeContainer.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(294.0, 4315.03, 59));
-    Ptr<WaypointMobilityModel> ueMobility =
-        ueNodeContainer.Get(0)->GetObject<WaypointMobilityModel>();
 
-    // 읽어온 CSV 데이터를 Waypoint로 추가
-    for (const auto& data : waypoints)
-    {
-        Waypoint waypoint(Seconds(data.time), Vector(data.x, data.y, data.z));
-        ueMobility->AddWaypoint(waypoint);
-    }
 
     // gnb bwp 설정
 
@@ -1010,7 +788,7 @@ main(void)
     Ptr<NrUeNetDevice> ueUuDev = DynamicCast<NrUeNetDevice>(ueUuNetDev.Get(0));
     // Get the first PHY (BWP) from the Uu NetDevice
     Ptr<NrUePhy> ueUuPhy = ueUuDev->GetPhy(0);
-   ueUuPhy->TraceConnectWithoutContext("ReportRsrp", MakeCallback(&UeMeasCallback));
+   // ueUuPhy->TraceConnectWithoutContext("ReportRsrp", MakeCallback(&UeMeasCallback));
 
     // Uu PHY에서 RSRP 측정 콜백 연결 (gNb와의 Uu 통신)
     Ptr<NrUeNetDevice> rsutemp = DynamicCast<NrUeNetDevice>(rsuNetDev.Get(0));
@@ -1046,8 +824,8 @@ main(void)
     serverApp->SetStopTime(simTime);
 
     Ptr<UdpClient> clientApp = CreateObject<UdpClient>();
-    clientApp->SetAttribute("MaxPackets", UintegerValue(45));
-    clientApp->SetAttribute("Interval", TimeValue(Seconds(2.0)));
+    clientApp->SetAttribute("MaxPackets", UintegerValue(3));
+    clientApp->SetAttribute("Interval", TimeValue(Seconds(1.0)));
     clientApp->SetAttribute("PacketSize", UintegerValue(100));
     clientApp->SetAttribute("slServerAddress",AddressValue(groupAddress6));
     clientApp->SetAttribute("slServerPort",UintegerValue(rsuSlPort));
@@ -1058,7 +836,7 @@ main(void)
 
 
     ue->AddApplication(clientApp);
-    clientApp->SetStartTime(Seconds(40.0));
+    clientApp->SetStartTime(Seconds(5.0));
     clientApp->SetStopTime(simTime);
     // todo:여기다가포트랑 주소 넣어야함
     // clientApp->setAddressSlUu(gnbServerIpv6, serverPort, groupAddress6, rsuSlPort);
@@ -1105,7 +883,7 @@ main(void)
 
     // 인터페이스 바꾸는거 그냥 예시
     clientApp->setInterface(ueUuNetDev.Get(0), ueSlNetDev.Get(0));
-    Simulator::Schedule(Seconds(50.0), &UdpClient::changeInterface, clientApp);
+    Simulator::Schedule(Seconds(6.0), &UdpClient::changeInterface, clientApp);
 
     // Ptr<Ipv6> ipv6 = ue->GetObject<Ipv6>();
     for (uint32_t ifIndex = 0; ifIndex < ipv6->GetNInterfaces(); ++ifIndex)
@@ -1140,15 +918,14 @@ main(void)
     //     "$ns3::NrUeNetDevice/ComponentCarrierMapUe/*/NrUePhy/ReportPowerSpectralDensity",
     //     MakeCallback(&psdCallback));
 
-    // UU방향 RSSI측정
     Simulator::Schedule(Seconds(0.0), &PrintUeInfo, ueNodeContainer.Get(0));
-    // Ptr<NetDevice> dev = ueUuNetDev.Get (0);
-    // Ptr<NrUeNetDevice> ueDev = DynamicCast<NrUeNetDevice> (dev);
-    // Ptr<NrSpectrumPhy> spectrumPhy = ueDev->GetPhy (0)->GetSpectrumPhy ();
-    // Ptr<NrInterference> interference = spectrumPhy->GetNrInterferenceCtrl();
-    // interference->TraceConnectWithoutContext(
-    //     "RssiPerProcessedChunk",
-    //     MakeBoundCallback(&UeRssiPerProcessedChunk, spectrumPhy));
+    Ptr<NetDevice> dev = ueUuNetDev.Get (0);
+    Ptr<NrUeNetDevice> ueDev = DynamicCast<NrUeNetDevice> (dev);
+    Ptr<NrSpectrumPhy> spectrumPhy = ueDev->GetPhy (0)->GetSpectrumPhy ();
+    Ptr<NrInterference> interference = spectrumPhy->GetNrInterferenceCtrl();
+    interference->TraceConnectWithoutContext(
+        "RssiPerProcessedChunk",
+        MakeBoundCallback(&UeRssiPerProcessedChunk, spectrumPhy));
 
     // SlNetDev 컨테이너의 모든 NetDevice에 대해 반복합니다.
     // for (uint32_t i =0 ; i<SlNetDev.GetN();i++)
@@ -1174,7 +951,7 @@ main(void)
     //             MakeBoundCallback(&UeSlRssiPerProcessedChunk, spectrumPhy));
     //     }
     // }
-    Packet::EnablePrinting();
+
     // --- 시뮬레이션 실행 ---
     Simulator::Stop(simTime);
     Simulator::Run();
